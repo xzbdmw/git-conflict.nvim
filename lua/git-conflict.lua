@@ -181,7 +181,15 @@ end
 ---@param dir string?
 ---@param callback fun(files: table<string, integer[]>, string)
 local function get_conflicted_files(dir, callback)
-  local cmd = { 'git', '-C', dir, 'diff', ('--line-prefix=%s%s'):format(dir, sep), '--name-only', '--diff-filter=U' }
+  local cmd = {
+    'git',
+    '-C',
+    dir,
+    'diff',
+    ('--line-prefix=%s%s'):format(dir, sep),
+    '--name-only',
+    '--diff-filter=U',
+  }
   job(cmd, function(data)
     local files = {}
     for _, filename in ipairs(data) do
@@ -586,6 +594,14 @@ local function set_highlights(highlights)
   api.nvim_set_hl(0, ANCESTOR_LABEL_HL, { background = ancestor_label_bg, default = true })
 end
 
+function M.start_conflict_detect(bufnr)
+  local gitdir = fn.getcwd() .. sep .. '.git'
+  if not vim.loop.fs_stat(gitdir) or state.current_watcher_dir == fn.getcwd() then return end
+  stop_running_watchers(gitdir)
+  fetch_conflicts(bufnr)
+  throttled_watcher(gitdir)
+end
+
 ---@param user_config GitConflictUserConfig
 function M.setup(user_config)
   if fn.executable('git') <= 0 then
@@ -614,17 +630,16 @@ function M.setup(user_config)
     callback = function() set_highlights(config.highlights) end,
   })
 
-  api.nvim_create_autocmd({ 'VimEnter', 'BufRead', 'SessionLoadPost', 'DirChanged' }, {
-    group = AUGROUP_NAME,
-    callback = function(args)
-      local gitdir = fn.getcwd() .. sep .. '.git'
-      if not vim.loop.fs_stat(gitdir) or state.current_watcher_dir == fn.getcwd() then return end
-      stop_running_watchers(gitdir)
-      fetch_conflicts(args.buf)
-      throttled_watcher(gitdir)
-    end,
-  })
-
+  -- api.nvim_create_autocmd({ 'VimEnter', 'BufRead', 'SessionLoadPost', 'DirChanged' }, {
+  --   group = AUGROUP_NAME,
+  --   callback = function(args)
+  --     local gitdir = fn.getcwd() .. sep .. '.git'
+  --     if not vim.loop.fs_stat(gitdir) or state.current_watcher_dir == fn.getcwd() then return end
+  --     stop_running_watchers(gitdir)
+  --     fetch_conflicts(args.buf)
+  --     throttled_watcher(gitdir)
+  --   end,
+  -- })
   api.nvim_create_autocmd('VimLeavePre', {
     group = AUGROUP_NAME,
     callback = function()
@@ -722,9 +737,17 @@ function M.find_next(side)
   local pos = find_position(
     0,
     function(line, position)
-      return position.current.range_start >= line and position.incoming.range_end >= line
+      return position.current.range_start > line and position.incoming.range_end > line
     end
   )
+  if pos == nil then
+    pos = find_position(
+      0,
+      function(_, position)
+        return position.current.range_start > 0 and position.incoming.range_end > 0
+      end
+    )
+  end
   set_cursor(pos, side)
 end
 
@@ -733,10 +756,20 @@ function M.find_prev(side)
   local pos = find_position(
     0,
     function(line, position)
-      return position.current.range_start <= line and position.incoming.range_end <= line
+      return position.current.range_start < line and position.incoming.range_end < line
     end,
     { reverse = true }
   )
+  if pos == nil then
+    local count = vim.api.nvim_buf_line_count(0)
+    pos = find_position(
+      0,
+      function(_, position)
+        return position.current.range_start < count and position.incoming.range_end < count
+      end,
+      { reverse = true }
+    )
+  end
   set_cursor(pos, side)
 end
 
