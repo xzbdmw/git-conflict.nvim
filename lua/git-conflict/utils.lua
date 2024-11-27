@@ -28,18 +28,18 @@ function M.job(cmd, callback)
   })
 end
 
+_G.gitconflict_timer = vim.loop.new_timer()
 ---Only call the passed function once every timeout in ms
 ---@param timeout integer
 ---@param func function
 ---@return function
 function M.throttle(timeout, func)
-  local timer = vim.loop.new_timer()
   local running = false
   return function(...)
     if not running then
       func(...)
       running = true
-      timer:start(timeout, 0, function() running = false end)
+      _G.gitconflict_timer:start(timeout, 0, function() running = false end)
     end
   end
 end

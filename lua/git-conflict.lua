@@ -460,6 +460,7 @@ local function stop_running_watchers(curr_dir)
       watchers[prev_dir] = nil
     end
   end
+  _G.gitconflict_timer:close()
 end
 
 --- Create a FS watcher for the current git directory or restart an existing one
