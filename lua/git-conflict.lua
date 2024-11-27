@@ -221,6 +221,16 @@ end
 ---@return integer? extmark_id
 local function hl_range(bufnr, hl, range_start, range_end)
   if not range_start or not range_end then return end
+  local ns = api.nvim_create_namespace('visual_range')
+  for i = range_start, range_end do
+    api.nvim_buf_set_extmark(0, ns, i - 1, 0, {
+      end_row = i,
+      strict = false,
+      sign_text = ' ',
+      priority = 1,
+    })
+  end
+  _G.indent_update()
   return api.nvim_buf_set_extmark(bufnr, NAMESPACE, range_start, 0, {
     hl_group = hl,
     hl_eol = true,
@@ -730,6 +740,7 @@ function M.clear(bufnr)
   if bufnr and not api.nvim_buf_is_valid(bufnr) then return end
   bufnr = bufnr or 0
   api.nvim_buf_clear_namespace(bufnr, NAMESPACE, 0, -1)
+  api.nvim_buf_clear_namespace(bufnr, vim.api.nvim_create_namespace('visual_range'), 0, -1)
 end
 
 ---@param side ConflictSide
